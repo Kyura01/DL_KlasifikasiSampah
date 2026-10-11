@@ -1,0 +1,26 @@
+# Dataset: tidak boleh diunggah ke repositori publik
+train/
+my_train/
+my_val/
+data/
+train_sources.csv
+
+# Bobot dan checkpoint selain file submission
+*.pth
+*.pt
+!submission/model.pth
+checkpoints/
+runs/
+
+# Python dan environment
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Sistem operasi dan editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
