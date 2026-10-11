@@ -1,10 +1,8 @@
-# Studio 2: Klasifikasi Sampah · Kelompok [ISI: nama atau nomor kelompok]
+# Studio 2: Klasifikasi Sampah 
 
 Deep Learning (IF25-40401) · Teknik Informatika ITERA · Semester Ganjil 2026/2027
 
 Repositori ini berisi kode pelatihan dan submission kelompok untuk Kompetisi Klasifikasi Sampah Studio Proyek 2. Model menerima satu foto sampah dan memprediksi salah satu dari lima kelas: `botol_plastik`, `gelas_plastik`, `kertas_kardus`, `saset_kemasan`, dan `styrofoam`.
-
-> **Status repositori:** initial commit. Struktur dan kontrak submission sudah siap, pelatihan model belum dijalankan. Bagian yang bertanda "rencana" akan diperbarui sesuai hasil eksperimen.
 
 ## Anggota Kelompok
 
