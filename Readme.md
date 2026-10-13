@@ -71,20 +71,20 @@ Alasan pemilihan untuk kasus ini:
 
 | Putaran | Commit | Macro-F1 (split validasi lokal) | Macro-F1 (diumumkan asisten) |
 |---------|--------|----------------------------------|------------------------------|
-| Preview 1 (14 Okt) | | | |
+| Preview 1 (14 Okt) | | 0.9751 | |
 | Preview 2 (21 Okt) | | | |
 | Final (25 Okt)     | | | |
 
 Catatan eksperimen singkat (apa yang dicoba, apa yang berhasil/gagal):
 
-* Preview 1: ConvNeXt-Tiny pretrained, fine-tuning dua tahap (head 3 epoch, full 10 epoch). AdamW lr 1e-4, weight decay 0.05, cosine annealing, label smoothing 0.1. Hasil: [diisi setelah pelatihan].
+* Preview 1: ConvNeXt-Tiny pretrained, fine-tuning dua tahap (head 3 epoch, full 10 epoch). AdamW lr 1e-4, weight decay 0.05, cosine annealing, label smoothing 0.1. Best checkpoint di epoch 4 tahap 2. Macro-F1 0.9751, akurasi 0.9780. Kelas terlemah: kertas_kardus (F1 0.9423), paling sering salah prediksi ke gelas_plastik dan styrofoam.
 
 ## Bobot Model
 
 Bobot disimpan di `submission/model.pth` sebagai `state_dict` dan dimuat oleh `evaluate.py` dengan `load_state_dict(strict=True)`.
 
 * State dict disimpan dalam format fp16 agar ukuran file di bawah 100 MB (sekitar 56 MB) sehingga tidak perlu Git LFS. `evaluate.py` tetap bisa memuat bobot fp16 karena `load_state_dict` otomatis menyesuaikan dtype.
-* Ukuran: [diisi setelah pelatihan].
+* Ukuran: 53.1 MB (fp16). Versi fp32 asli 106.2 MB, Macro-F1 tidak berubah setelah konversi.
 
 ## Cara Reproduksi
 
