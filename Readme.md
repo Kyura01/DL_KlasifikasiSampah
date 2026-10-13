@@ -15,7 +15,7 @@ Repositori ini berisi kode pelatihan dan submission kelompok untuk Kompetisi Kla
 ## Ringkasan Pendekatan
 
 * **Arsitektur / backbone**: ConvNeXt-Tiny dari `torchvision` dengan bobot pretrained ImageNet-1K (`ConvNeXt_Tiny_Weights.IMAGENET1K_V1`), head klasifikasi diganti menjadi 5 kelas.
-* **Strategi pelatihan (rencana)**: fine-tuning dua tahap. Tahap pertama hanya melatih head, tahap kedua membuka seluruh layer dengan learning rate kecil.
+* **Strategi pelatihan**: fine-tuning dua tahap. Tahap pertama hanya melatih head (3 epoch), tahap kedua membuka seluruh layer dengan learning rate kecil (10 epoch).
 * **Data tambahan**: tidak ada.
 * **Ukuran input & preprocessing**: `Resize(236)`, `CenterCrop(224)`, `ToTensor()`, lalu normalisasi dengan mean dan standar deviasi ImageNet.
 
@@ -54,7 +54,7 @@ Alasan pemilihan untuk kasus ini:
 2. ConvNeXt memakai LayerNorm, bukan Batch Normalization, sehingga pelatihan tetap stabil ketika ukuran batch kecil.
 3. Batas kompetisi longgar (file bobot maksimal 500 MB dan evaluasi maksimal 15 menit), sehingga tidak ada alasan memilih backbone yang lebih kecil dengan akurasi lebih rendah.
 
-### Strategi Pelatihan (Rencana)
+### Strategi Pelatihan
 
 | Komponen | Pengaturan awal |
 |----------|-----------------|
@@ -62,7 +62,7 @@ Alasan pemilihan untuk kasus ini:
 | Augmentasi | `RandomResizedCrop(224, scale=(0.6, 1.0))`, `RandomHorizontalFlip`, `ColorJitter(0.2, 0.2, 0.2)` |
 | Tahap 1 | Backbone dibekukan, hanya head yang dilatih selama beberapa epoch |
 | Tahap 2 | Seluruh layer dibuka, optimizer AdamW, learning rate 1e-4, weight decay 0,05 |
-| Scheduler | Cosine annealing dengan warmup |
+| Scheduler | Cosine annealing |
 | Loss | Cross entropy dengan label smoothing 0,1 untuk meredam label noise |
 | Ketidakseimbangan kelas | Pemantauan F1 per kelas, bobot kelas pada loss bila diperlukan |
 | Pemilihan model | Checkpoint dengan Macro-F1 tertinggi pada split validasi lokal |
@@ -77,14 +77,14 @@ Alasan pemilihan untuk kasus ini:
 
 Catatan eksperimen singkat (apa yang dicoba, apa yang berhasil/gagal):
 
-* Belum ada eksperimen.
+* Preview 1: ConvNeXt-Tiny pretrained, fine-tuning dua tahap (head 3 epoch, full 10 epoch). AdamW lr 1e-4, weight decay 0.05, cosine annealing, label smoothing 0.1. Hasil: [diisi setelah pelatihan].
 
 ## Bobot Model
 
 Bobot disimpan di `submission/model.pth` sebagai `state_dict` dan dimuat oleh `evaluate.py` dengan `load_state_dict(strict=True)`.
 
-* Status saat ini: belum ada. File ditambahkan setelah pelatihan pertama selesai.
-* Jika ukuran file melebihi 100 MB, bobot dilampirkan sebagai aset GitHub Release dan tautannya ditulis di sini: [ISI: tautan Release bila dipakai]
+* State dict disimpan dalam format fp16 agar ukuran file di bawah 100 MB (sekitar 56 MB) sehingga tidak perlu Git LFS. `evaluate.py` tetap bisa memuat bobot fp16 karena `load_state_dict` otomatis menyesuaikan dtype.
+* Ukuran: [diisi setelah pelatihan].
 
 ## Cara Reproduksi
 
@@ -92,7 +92,7 @@ Dataset tidak disertakan di repositori ini sesuai aturan kompetisi. Unduh train 
 
 ```bash
 pip install -r requirements.txt
-python train.py --data ./train            # ditambahkan pada commit berikutnya
+python train.py --data ./train
 python evaluate.py --submission ./submission --data ./my_val
 ```
 
@@ -103,9 +103,9 @@ python evaluate.py --submission ./submission --data ./my_val
 ```
 submission/
   model.py          # get_model() dan get_transform() untuk ConvNeXt-Tiny
-  model.pth         # state_dict model terbaik (ditambahkan setelah pelatihan)
+  model.pth         # state_dict model terbaik
 evaluate.py         # salinan skrip evaluasi resmi, tidak diubah
-train.py            # skrip pelatihan (ditambahkan pada commit berikutnya)
+train.py            # skrip pelatihan
 requirements.txt    # paket untuk pelatihan dan evaluasi
 README.md
 ```
