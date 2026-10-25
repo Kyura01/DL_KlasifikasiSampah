@@ -14,27 +14,28 @@ Repositori ini berisi kode pelatihan dan submission kelompok untuk Kompetisi Kla
 
 ## Ringkasan Pendekatan
 
-* **Arsitektur / backbone**: ConvNeXt-Tiny dari `torchvision` dengan bobot pretrained ImageNet-1K (`ConvNeXt_Tiny_Weights.IMAGENET1K_V1`), head klasifikasi diganti menjadi 5 kelas.
-* **Strategi pelatihan**: fine-tuning dua tahap. Tahap pertama hanya melatih head (3 epoch), tahap kedua membuka seluruh layer dengan learning rate kecil (10 epoch).
+* **Arsitektur / backbone**: ConvNeXt-Tiny dari `timm` dengan bobot pretrained ImageNet-22k yang di-fine-tune ke ImageNet-1k (`convnext_tiny.fb_in22k_ft_in1k`), head klasifikasi diganti menjadi 5 kelas. Saat evaluasi, model merata-rata logits gambar asli dan gambar yang di-flip horizontal (TTA).
+* **Strategi pelatihan**: fine-tuning satu tahap seluruh layer selama 25 epoch dengan warmup, cosine annealing, MixUp/CutMix, dan EMA bobot. Model final dilatih ulang di seluruh data latih (`my_train` + `my_val`).
 * **Data tambahan**: tidak ada.
-* **Ukuran input & preprocessing**: `Resize(236)`, `CenterCrop(224)`, `ToTensor()`, lalu normalisasi dengan mean dan standar deviasi ImageNet.
+* **Ukuran input & preprocessing**: `Resize(304)`, `CenterCrop(288)`, `ToTensor()`, lalu normalisasi dengan mean dan standar deviasi ImageNet.
+* **Paket tambahan**: `timm` (tercantum di `submission/requirements.txt`).
 
 ### Arsitektur yang Dipakai
 
-ConvNeXt adalah Convolutional Neural Network (CNN) murni yang desainnya dimodernisasi mengikuti gagasan Vision Transformer, tanpa memakai mekanisme attention. Varian Tiny dipilih karena akurasi top-1 ImageNet-1K sebesar 82,52% dengan ukuran yang masih jauh di bawah batas 500 MB kompetisi.
+ConvNeXt adalah Convolutional Neural Network (CNN) murni yang desainnya dimodernisasi mengikuti gagasan Vision Transformer, tanpa memakai mekanisme attention. Varian Tiny dipilih karena ukurannya jauh di bawah batas 500 MB kompetisi. Bobot pretrained ImageNet-22k → 1k dari timm memberi akurasi top-1 ImageNet-1K 84,2%, lebih tinggi dari bobot torchvision ImageNet-1K (82,5%) dengan arsitektur yang identik.
 
-Aliran data untuk input 224 × 224:
+Aliran data untuk input 288 × 288:
 
 | Bagian | Isi | Ukuran keluaran |
 |--------|-----|-----------------|
-| Stem | Konvolusi 4 × 4 stride 4, lalu Layer Normalization (LayerNorm) | 56 × 56 × 96 |
-| Stage 1 | 3 blok ConvNeXt | 56 × 56 × 96 |
-| Downsample | LayerNorm, konvolusi 2 × 2 stride 2 | 28 × 28 × 192 |
-| Stage 2 | 3 blok ConvNeXt | 28 × 28 × 192 |
-| Downsample | LayerNorm, konvolusi 2 × 2 stride 2 | 14 × 14 × 384 |
-| Stage 3 | 9 blok ConvNeXt | 14 × 14 × 384 |
-| Downsample | LayerNorm, konvolusi 2 × 2 stride 2 | 7 × 7 × 768 |
-| Stage 4 | 3 blok ConvNeXt | 7 × 7 × 768 |
+| Stem | Konvolusi 4 × 4 stride 4, lalu Layer Normalization (LayerNorm) | 72 × 72 × 96 |
+| Stage 1 | 3 blok ConvNeXt | 72 × 72 × 96 |
+| Downsample | LayerNorm, konvolusi 2 × 2 stride 2 | 36 × 36 × 192 |
+| Stage 2 | 3 blok ConvNeXt | 36 × 36 × 192 |
+| Downsample | LayerNorm, konvolusi 2 × 2 stride 2 | 18 × 18 × 384 |
+| Stage 3 | 9 blok ConvNeXt | 18 × 18 × 384 |
+| Downsample | LayerNorm, konvolusi 2 × 2 stride 2 | 9 × 9 × 768 |
+| Stage 4 | 3 blok ConvNeXt | 9 × 9 × 768 |
 | Head | Global average pooling, LayerNorm, Flatten, `Linear(768, 5)` | 5 logits |
 
 Satu blok ConvNeXt terdiri atas:
@@ -59,13 +60,15 @@ Alasan pemilihan untuk kasus ini:
 | Komponen | Pengaturan awal |
 |----------|-----------------|
 | Split lokal | 85% latih dan 15% validasi, stratified per kelas, seed 42 |
-| Augmentasi | `RandomResizedCrop(224, scale=(0.6, 1.0))`, `RandomHorizontalFlip`, `ColorJitter(0.2, 0.2, 0.2)` |
-| Tahap 1 | Backbone dibekukan, hanya head yang dilatih selama beberapa epoch |
-| Tahap 2 | Seluruh layer dibuka, optimizer AdamW, learning rate 1e-4, weight decay 0,05 |
-| Scheduler | Cosine annealing |
+| Augmentasi | `RandomResizedCrop(288, scale=(0.5, 1.0))`, `RandomHorizontalFlip`, `RandomVerticalFlip(0.2)`, `TrivialAugmentWide`, `RandomErasing(0.25)` |
+| MixUp / CutMix | Diterapkan pada 50% batch (MixUp alpha 0,2 atau CutMix alpha 1,0, dipilih acak) |
+| Optimizer | AdamW, learning rate backbone 1e-4, head 1e-3, weight decay 0,05 (tanpa weight decay untuk bias, norm, dan layer scale) |
+| Scheduler | Warmup linear 1 epoch lalu cosine annealing per step, 25 epoch |
+| Regularisasi | Stochastic depth (drop path) 0,1 |
 | Loss | Cross entropy dengan label smoothing 0,1 untuk meredam label noise |
-| Ketidakseimbangan kelas | Pemantauan F1 per kelas, bobot kelas pada loss bila diperlukan |
-| Pemilihan model | Checkpoint dengan Macro-F1 tertinggi pada split validasi lokal |
+| EMA | Exponential moving average bobot, decay 0,998, bobot EMA yang dievaluasi dan disimpan |
+| Mixed precision | AMP (`torch.autocast` + `GradScaler`) di GPU |
+| Pemilihan model | Run validasi: EMA dengan Macro-F1 tertinggi di split lokal (dengan TTA flip). Run final (`--full`): dilatih ulang di seluruh data dengan jumlah epoch dari run validasi, EMA epoch terakhir disimpan |
 
 ## Hasil
 
@@ -73,40 +76,43 @@ Alasan pemilihan untuk kasus ini:
 |---------|--------|----------------------------------|------------------------------|
 | Preview 1 (14 Okt) | | 0.9751 | |
 | Preview 2 (21 Okt) | | | |
-| Final (25 Okt)     | | | |
+| Final (25 Okt)     | | 0.9767 (run validasi) | |
 
 Catatan eksperimen singkat (apa yang dicoba, apa yang berhasil/gagal):
 
 * Preview 1: ConvNeXt-Tiny pretrained, fine-tuning dua tahap (head 3 epoch, full 10 epoch). AdamW lr 1e-4, weight decay 0.05, cosine annealing, label smoothing 0.1. Best checkpoint di epoch 4 tahap 2. Macro-F1 0.9751, akurasi 0.9780. Kelas terlemah: kertas_kardus (F1 0.9423), paling sering salah prediksi ke gelas_plastik dan styrofoam.
+* Final: arsitektur tetap ConvNeXt-Tiny. Perubahannya: bobot pretrained ImageNet-22k → 1k (timm), resolusi 224 → 288, satu tahap 25 epoch dengan warmup + cosine, augmentasi lebih kuat (TrivialAugment, RandomErasing, MixUp/CutMix), drop path 0,1, EMA bobot, dan TTA flip horizontal. Run validasi: Macro-F1 0.9767 di epoch 13 (akurasi 0.9780), F1 kertas_kardus 0.9615; setelah epoch 13 skor turun ke sekitar 0.965 sehingga training 25 epoch terlalu lama. Model final dilatih ulang di seluruh data (my_train + my_val) selama 13 epoch. Dari 9 gambar my_val yang salah prediksi, sebagian besar berlabel meragukan (poster daur ulang berlabel kertas_kardus, gelas "polystyrene" yang tampak seperti plastik bening).
 
 ## Bobot Model
 
 Bobot disimpan di `submission/model.pth` sebagai `state_dict` dan dimuat oleh `evaluate.py` dengan `load_state_dict(strict=True)`.
 
-* State dict disimpan dalam format fp16 agar ukuran file di bawah 100 MB (sekitar 56 MB) sehingga tidak perlu Git LFS. `evaluate.py` tetap bisa memuat bobot fp16 karena `load_state_dict` otomatis menyesuaikan dtype.
-* Ukuran: 53.1 MB (fp16). Versi fp32 asli 106.2 MB, Macro-F1 tidak berubah setelah konversi.
+* State dict disimpan dalam format fp16 agar ukuran file di bawah 100 MB sehingga tidak perlu Git LFS. `evaluate.py` tetap bisa memuat bobot fp16 karena `load_state_dict` otomatis menyesuaikan dtype.
+* Ukuran: sekitar 53 MB (fp16). Versi fp32 sekitar 106 MB.
+* Key `state_dict` mengikuti timm `convnext_tiny`. `get_model()` membangun kelas `ConvNeXtTTA` (subclass `timm.models.convnext.ConvNeXt`) tanpa mengunduh bobot.
 
 ## Cara Reproduksi
 
-Dataset tidak disertakan di repositori ini sesuai aturan kompetisi. Unduh train set dari Google Drive mata kuliah, lalu letakkan folder `train/` di root repositori.
-
 ```bash
 pip install -r requirements.txt
-python train.py --data ./train
+# Run validasi: pilih epoch terbaik di my_val, cetak gambar yang salah prediksi
+python train.py --data ./train --dump-errors
 python evaluate.py --submission ./submission --data ./my_val
+# Run final: latih ulang di my_train + my_val dengan jumlah epoch dari run validasi
+python train.py --data ./train --full --epochs <N>
 ```
 
-`train.py` membuat split lokal `my_train/` dan `my_val/`, lalu menyimpan bobot terbaik ke `submission/model.pth`.
+`train.py` membuat split lokal `my_train/` dan `my_val/`, lalu menyimpan bobot ke `submission/model.pth`. Bobot pretrained `convnext_tiny.fb_in22k_ft_in1k` diunduh otomatis oleh timm saat pelatihan.
 
 ## Struktur Repositori
 
 ```
 submission/
-  model.py          # get_model() dan get_transform() untuk ConvNeXt-Tiny
+  model.py          # get_model() dan get_transform() untuk ConvNeXt-Tiny + TTA
   model.pth         # state_dict model terbaik
+  requirements.txt  # paket tambahan (timm)
 evaluate.py         # salinan skrip evaluasi resmi, tidak diubah
-train.py            # skrip pelatihan
-requirements.txt    # paket untuk pelatihan dan evaluasi
+train.py            # skrip pelatihanrequirements.txt    # paket untuk pelatihan dan evaluasi
 README.md
 ```
 

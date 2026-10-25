@@ -24,3 +24,5 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+colab/
+graphify-out/
